@@ -116,3 +116,45 @@ document.getElementById("export").onclick = () => {
     link.download = "attendance.csv";
     link.click();
 };
+
+document.addEventListener("DOMContentLoaded", () => {
+    Object.entries(students).forEach(([group, members]) => {
+        members.forEach(name => {
+            for (let i = 1; i <= weeks; i++) {
+                const checkbox = document.querySelector(`input[name="${name}-w${i}"]`);
+                if (!checkbox) continue;
+                const date = new Date(startDate);
+                date.setDate(date.getDate() + (i - 1) * 7);
+                const weekStr = `W${i}`;
+                const dateStr = date.toISOString().split("T")[0];
+
+                checkbox.addEventListener("change", () => {
+                    localStorage.setItem(`${name}-w${i}`, checkbox.checked);
+
+                    const payload = [{
+                        group: group,
+                        student: name,
+                        week: weekStr,
+                        date: dateStr,
+                        attended: checkbox.checked ? 1 : 0
+                    }];
+
+                    fetch(sheetURL, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(response => response.text())
+                    .then(result => {
+                        console.log("POST success:", result);
+                    })
+                    .catch(error => {
+                        console.error("POST error:", error);
+                    });
+                });
+            }
+        });
+    });
+});
