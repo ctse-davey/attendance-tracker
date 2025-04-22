@@ -1,0 +1,75 @@
+body {
+    font-family: "Segoe UI", sans-serif;
+    padding: 20px;
+    background-color: #f0f8ff;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 20px;
+    gap: 10px;
+}
+
+.tab {
+    padding: 10px 15px;
+    background: #ccc;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.tab.active {
+    background: #2d6a4f;
+    color: white;
+}
+
+.group {
+    margin-bottom: 40px;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.group h2 {
+    margin-bottom: 10px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+    display: block;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    text-align: center;
+    padding: 4px;
+    min-width: 35px;
+}
+
+th {
+    background-color: #f7f7f7;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+td:first-child, th:first-child {
+    position: sticky;
+    left: 0;
+    background-color: #f0f0f0;
+    font-weight: bold;
+    z-index: 1;
+}
+
+input[type="checkbox"] {
+    transform: scale(1.1);
+}
