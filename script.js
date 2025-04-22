@@ -8,14 +8,8 @@ const students = {
     "第3組 - 彭姑娘 ★ Winnie": ["彭姑娘", "Winnie", "何天嬌", "溫房嬌", "朱寶兒", "李玉華", "符志蓮Lilian", "蔡麗萍Doris", "鄭瑞琼Gloria", "黃綺華"]
 };
 
-// The rest of the logic (cleaned)
-const startDate = new Date("2025-04-21");
-const weeks = 49;
-const students = {
-    "第1組 - 碧蓮 ★ 文信": ["碧蓮", "文信", "焦華彬", "黃潤萍", "胡灝文", "羅青玲", "廖喜兒", "任麥寶燕", "羅美好", "盧寶萍BoBo"],
-    "第2組 - 桂蘭 ★ Jenny": ["桂蘭", "Jenny", "蕭慧明", "周貴珍", "林寶珍", "吳建容", "梁漪好", "黎桂英", "方娟梅"],
-    "第3組 - 彭姑娘 ★ Winnie": ["彭姑娘", "Winnie", "何天嬌", "溫房嬌", "朱寶兒", "李玉華", "符志蓮Lilian", "蔡麗萍Doris", "鄭瑞琼Gloria", "黃綺華"]
-};
+
+
 
 const monthMap = {};
 
@@ -154,3 +148,179 @@ Object.keys(monthMap).forEach((monthKey, idx) => {
 tablesContainer.appendChild(container);
 });
 
+// =========================
+// Save checkbox states to localStorage
+// =========================
+document.addEventListener("DOMContentLoaded", () => {
+    const checkboxes = document.querySelectorAll("input[type='checkbox']");
+    checkboxes.forEach(box => {
+        const key = box.name;
+        box.checked = localStorage.getItem(key) === "true";
+        box.addEventListener("change", () => {
+            localStorage.setItem(key, box.checked);
+        });
+    });
+});
+
+// =========================
+// Export attendance data to CSV
+// =========================
+const exportButton = document.createElement("button");
+exportButton.textContent = "匯出為 CSV";
+exportButton.style.margin = "20px";
+exportButton.onclick = () => {
+    const rows = [["群組", "學生", "週次", "出席"]];
+    Object.entries(students).forEach(([groupName, studentList]) => {
+        studentList.forEach(student => {
+            for (let i = 1; i <= weeks; i++) {
+                const checkbox = document.querySelector(`input[name='${student}-w${i}']`);
+                if (checkbox) {
+                    rows.push([groupName, student, `W${i}`, checkbox.checked ? "1" : "0"]);
+                }
+            }
+        });
+    });
+
+    const csvContent = rows.map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "attendance_export.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+document.body.insertBefore(exportButton, document.getElementById("tablesContainer"));
+
+// =========================
+// Analytics Chart using Chart.js
+// =========================
+const chartCanvas = document.createElement("canvas");
+chartCanvas.id = "attendanceChart";
+chartCanvas.style.maxWidth = "1000px";
+chartCanvas.style.margin = "20px auto";
+chartCanvas.style.display = "block";
+document.body.appendChild(chartCanvas);
+
+setTimeout(() => {
+    const weeklyTotals = Array.from({ length: weeks }, (_, i) => {
+        const week = i + 1;
+        const allBoxes = document.querySelectorAll(`input[name$='-w${week}']`);
+        return Array.from(allBoxes).filter(b => b.checked).length;
+    });
+
+    const ctx = document.getElementById("attendanceChart").getContext("2d");
+    new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: weeklyTotals.map((_, i) => `W${i + 1}`),
+            datasets: [{
+                label: "每週總出席人數",
+                data: weeklyTotals,
+                borderWidth: 2,
+                fill: false,
+                tension: 0.2
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: '出席人數'
+                    }
+                }
+            }
+        }
+    });
+}, 500);
+
+
+// URL to your Apps Script endpoint
+const sheetURL = "https://script.google.com/macros/s/AKfycbyLKxAMq7_w5VKbLfbqspwZ2JdKuqagql7xY3y_JpdEF1R8CvQWV0IepFCPCjrx9wJx/exec";
+
+// Save attendance on checkbox change
+document.addEventListener("DOMContentLoaded", () => {
+    const checkboxes = document.querySelectorAll("input[type='checkbox']");
+    checkboxes.forEach(box => {
+        const key = box.name;
+        box.checked = localStorage.getItem(key) === "true";
+
+        box.addEventListener("change", () => {
+            localStorage.setItem(key, box.checked);
+
+            const week = key.split('-w')[1];
+            const student = key.split('-w')[0];
+            const date = new Date(startDate.getTime() + (week - 1) * 7 * 24 * 60 * 60 * 1000);
+            let group = "";
+            Object.entries(students).forEach(([g, members]) => {
+                if (members.includes(student)) group = g;
+            });
+
+            const data = [{
+                group: group,
+                student: student,
+                week: `W${week}`,
+                date: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
+                attended: box.checked ? 1 : 0
+            }];
+
+            fetch(sheetURL, {
+                method: "POST",
+                body: JSON.stringify(data),
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            }).then(response => response.text())
+              .then(resp => console.log("Saved:", resp))
+              .catch(err => console.error("Error saving to Google Sheets:", err));
+        });
+    });
+});
+
+// Optionally, load saved data from Google Sheets
+fetch(sheetURL + '?t=' + new Date().getTime())
+    .then(response => response.json())
+    .then(data => {
+        data.forEach(entry => {
+            const name = entry.student;
+            const week = entry.week.replace("W", "");
+            const key = `${name}-w${week}`;
+            const checkbox = document.querySelector(`input[name='${key}']`);
+            if (checkbox) {
+                checkbox.checked = entry.attended == "1";
+                localStorage.setItem(key, checkbox.checked);
+            }
+        });
+    })
+    .catch(err => console.error("Error loading data from Google Sheets:", err));
+
+
+// Add sync button
+const syncButton = document.createElement("button");
+syncButton.textContent = "同步資料（從 Google Sheets 讀取）";
+syncButton.style.margin = "10px";
+syncButton.onclick = () => {
+    fetch(sheetURL + '?t=' + new Date().getTime())
+        .then(response => response.json())
+        .then(data => {
+            data.forEach(entry => {
+                const name = entry.student;
+                const week = entry.week.replace("W", "");
+                const key = `${name}-w${week}`;
+                const checkbox = document.querySelector(`input[name='${key}']`);
+                if (checkbox) {
+                    checkbox.checked = entry.attended == "1";
+                    localStorage.setItem(key, checkbox.checked);
+                }
+            });
+            alert("同步完成！");
+        })
+        .catch(err => {
+            console.error("同步失敗：", err);
+            alert("同步失敗，請稍後再試！");
+        });
+};
+document.body.insertBefore(syncButton, document.getElementById("tablesContainer"));
