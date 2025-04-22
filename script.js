@@ -36,46 +36,6 @@ exportControls.innerHTML = `
 <button id="exportExcel" style="margin-left:10px;">匯出為 Excel</button>
 `;
 document.body.insertBefore(exportControls, document.getElementById("tablesContainer"));
-// =========================
-// Sync to Google Sheet via Apps Script Web App
-// =========================
-const syncButton = document.createElement("button");
-syncButton.textContent = "同步至 Google 試算表";
-syncButton.style.marginLeft = "10px";
-exportControls.appendChild(syncButton);
-
-syncButton.onclick = async () => {
-    const rows = [["群組","學生","週次","日期","出席"]];
-    Object.entries(students).forEach(([groupName, studentList]) => {
-        studentList.forEach(student => {
-            for (let i = 1; i <= weeks; i++) {
-                const checkbox = document.querySelector(`input[name='${student}-w${i}']`);
-                if (!checkbox) continue;
-                const date = new Date(startDate);
-                date.setDate(date.getDate() + (i - 1) * 7);
-                const ymd = date.toISOString().split("T")[0];
-                const weekStr = "W" + i;
-                rows.push([groupName, student, weekStr, ymd, checkbox.checked ? "1" : "0"]);
-            }
-        });
-    });
-    try {
-        const resp = await fetch("https://script.google.com/macros/s/AKfycbyLKxAMq7_w5VKbLfbqspwZ2JdKuqagql7xY3y_JpdEF1R8CvQWV0IepFCPCjrx9wJx/exec", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(rows)
-        });
-        const result = await resp.json();
-        if (resp.ok && result.status === 'success') {
-            alert("同步成功！");
-        } else {
-            alert("同步失敗: " + (result.message || resp.statusText));
-        }
-    } catch (err) {
-        alert("同步錯誤: " + err.message);
-    }
-};
-
 
 // =========================
 // Populate exportKeyword options based on exportType
