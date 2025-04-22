@@ -1,3 +1,4 @@
+
 const startDate = new Date("2025-04-21");
 const weeks = 49;
 const students = {
@@ -7,7 +8,6 @@ const students = {
 };
 
 const monthMap = {};
-
 for (let i = 0; i < weeks; i++) {
     const date = new Date(startDate);
     date.setDate(date.getDate() + i * 7);
@@ -21,6 +21,140 @@ for (let i = 0; i < weeks; i++) {
 const monthTabs = document.getElementById("monthTabs");
 const tablesContainer = document.getElementById("tablesContainer");
 
+// Export Filter Controls
+const exportControls = document.createElement("div");
+exportControls.style.margin = "20px";
+exportControls.innerHTML = `
+<label>匯出類型：</label>
+<select id="exportType">
+  <option value="all">全部</option>
+  <option value="group">群組名稱</option>
+  <option value="month">月份 (2025-05)</option>
+  <option value="week">週次 (W12)</option>
+</select>
+<select id="exportKeyword" style="margin-left:10px;"></select>
+<button id="exportExcel" style="margin-left:10px;">匯出為 Excel</button>
+`;
+document.body.insertBefore(exportControls, document.getElementById("tablesContainer"));
+// =========================
+// Sync to Google Sheet via Apps Script Web App
+// =========================
+const syncButton = document.createElement("button");
+syncButton.textContent = "同步至 Google 試算表";
+syncButton.style.marginLeft = "10px";
+exportControls.appendChild(syncButton);
+
+syncButton.onclick = async () => {
+    const rows = [["群組","學生","週次","日期","出席"]];
+    Object.entries(students).forEach(([groupName, studentList]) => {
+        studentList.forEach(student => {
+            for (let i = 1; i <= weeks; i++) {
+                const checkbox = document.querySelector(`input[name='${student}-w${i}']`);
+                if (!checkbox) continue;
+                const date = new Date(startDate);
+                date.setDate(date.getDate() + (i - 1) * 7);
+                const ymd = date.toISOString().split("T")[0];
+                const weekStr = "W" + i;
+                rows.push([groupName, student, weekStr, ymd, checkbox.checked ? "1" : "0"]);
+            }
+        });
+    });
+    try {
+        const resp = await fetch("https://script.google.com/macros/s/AKfycbyLKxAMq7_w5VKbLfbqspwZ2JdKuqagql7xY3y_JpdEF1R8CvQWV0IepFCPCjrx9wJx/exec", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rows)
+        });
+        const result = await resp.json();
+        if (resp.ok && result.status === 'success') {
+            alert("同步成功！");
+        } else {
+            alert("同步失敗: " + (result.message || resp.statusText));
+        }
+    } catch (err) {
+        alert("同步錯誤: " + err.message);
+    }
+};
+
+
+// =========================
+// Populate exportKeyword options based on exportType
+// =========================
+const exportTypeSelect = document.getElementById("exportType");
+const exportKeywordSelect = document.getElementById("exportKeyword");
+
+function updateKeywordOptions() {
+    const type = exportTypeSelect.value;
+    exportKeywordSelect.innerHTML = "";
+    if (type === "group") {
+        Object.keys(students).forEach(groupName => {
+            const opt = document.createElement("option");
+            opt.value = groupName;
+            opt.text = groupName;
+            exportKeywordSelect.appendChild(opt);
+        });
+        exportKeywordSelect.style.display = "inline-block";
+    } else if (type === "month") {
+        Object.keys(monthMap).forEach(monthKey => {
+            const opt = document.createElement("option");
+            opt.value = monthKey;
+            opt.text = monthKey;
+            exportKeywordSelect.appendChild(opt);
+        });
+        exportKeywordSelect.style.display = "inline-block";
+    } else if (type === "week") {
+        for (let i = 1; i <= weeks; i++) {
+            const w = "W" + i;
+            const opt = document.createElement("option");
+            opt.value = w;
+            opt.text = w;
+            exportKeywordSelect.appendChild(opt);
+        }
+        exportKeywordSelect.style.display = "inline-block";
+    } else {
+        exportKeywordSelect.style.display = "none";
+    }
+}
+
+// Initialize options on load
+exportTypeSelect.addEventListener("change", updateKeywordOptions);
+updateKeywordOptions();
+
+
+document.getElementById("exportExcel").onclick = () => {
+    const type = document.getElementById("exportType").value;
+    const keyword = document.getElementById("exportKeyword").value.trim();
+    const data = [["群組", "學生", "週次", "日期", "出席"]];
+
+    Object.entries(students).forEach(([groupName, studentList]) => {
+        if (type === "group" && !groupName.includes(keyword)) return;
+
+        studentList.forEach(student => {
+            for (let i = 1; i <= weeks; i++) {
+                const checkbox = document.querySelector(`input[name='${student}-w${i}']`);
+                if (!checkbox) continue;
+
+                const date = new Date(startDate);
+                date.setDate(date.getDate() + (i - 1) * 7);
+                const ymd = date.toISOString().split("T")[0];
+                const ym = ymd.slice(0, 7);
+                const weekStr = "W" + i;
+
+                if (type === "month" && !ym.includes(keyword)) continue;
+                if (type === "week" && weekStr !== keyword) continue;
+
+                data.push([groupName, student, weekStr, ymd, checkbox.checked ? "1" : "0"]);
+            }
+        });
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "出席資料");
+    XLSX.writeFile(workbook, "attendance_filtered_export.xlsx");
+};
+
+// Create tables
 Object.keys(monthMap).forEach((monthKey, idx) => {
     const tab = document.createElement("div");
     tab.className = "tab" + (idx === 0 ? " active" : "");
@@ -47,23 +181,22 @@ Object.keys(monthMap).forEach((monthKey, idx) => {
         const table = document.createElement("table");
         const thead = document.createElement("thead");
         const headRow = document.createElement("tr");
-
-        headRow.innerHTML = `<th>姓名</th>` + monthMap[monthKey].map(w => {
-        const d = new Date(w.date);
-        const formattedDate = `W${w.week} - ${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
-        return `<th>${formattedDate}</th>`;
-    }).join("");
+        headRow.innerHTML = "<th>姓名</th>" + monthMap[monthKey].map(w => {
+            const d = new Date(w.date);
+            return `<th>W${w.week} - ${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日</th>`;
+        }).join("");
         thead.appendChild(headRow);
         table.appendChild(thead);
 
         const tbody = document.createElement("tbody");
         groupStudents.forEach(name => {
             const row = document.createElement("tr");
-            row.innerHTML = `<td>${name}</td>` + monthMap[monthKey].map(w => `<td><input type="checkbox" name="${name}-w${w.week}"></td>`).join("");
+            row.innerHTML = `<td>${name}</td>` + monthMap[monthKey].map(w => {
+                return `<td><input type="checkbox" name="${name}-w${w.week}"></td>`;
+            }).join("");
             tbody.appendChild(row);
         });
 
-        
         const countRow = document.createElement("tr");
         countRow.innerHTML = `<td><strong>出席人數</strong></td>` + monthMap[monthKey].map(w => {
             const id = `count-${groupName.replace(/\s+/g, '')}-w${w.week}`;
@@ -72,58 +205,49 @@ Object.keys(monthMap).forEach((monthKey, idx) => {
         table.appendChild(tbody);
         table.appendChild(countRow);
 
-        // Add checkbox listeners
         groupStudents.forEach(name => {
             monthMap[monthKey].forEach(w => {
                 const week = w.week;
                 setTimeout(() => {
                     const checkbox = document.querySelector(`input[name='${name}-w${week}']`);
                     const countId = `count-${groupName.replace(/\s+/g, '')}-w${week}`;
-                    checkbox.addEventListener('change', () => {
+                    checkbox.addEventListener("change", () => {
                         const countCell = document.getElementById(countId);
-                        const allBoxes = document.querySelectorAll(`input[name$='-w${week}']`);
-                        const checkedCount = Array.from(allBoxes).filter(b => b.checked).length;
-                        countCell.textContent = checkedCount;
+                        const groupBoxes = groupStudents.map(n => document.querySelector(`input[name='${n}-w${week}']`)).filter(Boolean);
+                        countCell.textContent = groupBoxes.filter(b => b.checked).length;
                     });
                 }, 0);
             });
         });
-    
+
         group.appendChild(table);
         container.appendChild(group);
     }
 
-    
-    // Add total attendance row across all groups
     const totalRow = document.createElement("div");
     totalRow.className = "group";
-    totalRow.innerHTML = `<h2>全部總出席</h2>`;
-
+    totalRow.innerHTML = "<h2>全部總出席</h2>";
     const totalTable = document.createElement("table");
     const totalHead = document.createElement("thead");
     const totalHeadRow = document.createElement("tr");
-
-    totalHeadRow.innerHTML = `<th>週次</th>` + monthMap[monthKey].map(w => {
+    totalHeadRow.innerHTML = "<th>週次</th>" + monthMap[monthKey].map(w => {
         const d = new Date(w.date);
         return `<th>W${w.week} - ${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日</th>`;
     }).join("");
-
     totalHead.appendChild(totalHeadRow);
     totalTable.appendChild(totalHead);
 
     const totalBody = document.createElement("tbody");
     const totalCountRow = document.createElement("tr");
-    totalCountRow.innerHTML = `<td><strong>出席人數</strong></td>` + monthMap[monthKey].map(w => {
+    totalCountRow.innerHTML = "<td><strong>出席人數</strong></td>" + monthMap[monthKey].map(w => {
         const id = `total-week-${w.week}`;
         return `<td id="${id}">0</td>`;
     }).join("");
-
     totalBody.appendChild(totalCountRow);
     totalTable.appendChild(totalBody);
     totalRow.appendChild(totalTable);
-    container.appendChild(totalRow);
+    container.insertBefore(totalRow, container.firstChild);
 
-    // Live update total counts across all groups
     monthMap[monthKey].forEach(w => {
         const week = w.week;
         setTimeout(() => {
@@ -140,7 +264,7 @@ Object.keys(monthMap).forEach((monthKey, idx) => {
         }, 0);
     });
 
-tablesContainer.appendChild(container);
+    tablesContainer.appendChild(container);
 });
 
 // =========================
@@ -155,79 +279,55 @@ document.addEventListener("DOMContentLoaded", () => {
             localStorage.setItem(key, box.checked);
         });
     });
-});
 
-// =========================
-// Export attendance data to CSV
-// =========================
-const exportButton = document.createElement("button");
-exportButton.textContent = "匯出為 CSV";
-exportButton.style.margin = "20px";
-exportButton.onclick = () => {
-    const rows = [["群組", "學生", "週次", "出席"]];
-    Object.entries(students).forEach(([groupName, studentList]) => {
-        studentList.forEach(student => {
-            for (let i = 1; i <= weeks; i++) {
-                const checkbox = document.querySelector(`input[name='${student}-w${i}']`);
-                if (checkbox) {
-                    rows.push([groupName, student, `W${i}`, checkbox.checked ? "1" : "0"]);
-                }
-            }
-        });
-    });
+    // Trigger attendance calculations
+    for (let i = 1; i <= weeks; i++) {
+        const event = new Event("change");
+        document.querySelectorAll(`input[name$='-w${i}']`).forEach(box => box.dispatchEvent(event));
+    }
 
-    const csvContent = rows.map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "attendance_export.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-document.body.insertBefore(exportButton, document.getElementById("tablesContainer"));
-
-// =========================
-// Analytics Chart using Chart.js
-// =========================
-const chartCanvas = document.createElement("canvas");
-chartCanvas.id = "attendanceChart";
-chartCanvas.style.maxWidth = "1000px";
-chartCanvas.style.margin = "20px auto";
-chartCanvas.style.display = "block";
-document.body.appendChild(chartCanvas);
-
+    // Draw Chart
+    
+    const chartCanvas = document.createElement("canvas");
+    chartCanvas.id = "attendanceChart";
+    // Full width chart
+    chartCanvas.style.width = "100%";
+    chartCanvas.style.height = "400px";
+    chartCanvas.style.display = "block";
+    const chartContainer = document.getElementById("chartContainer");
+    chartContainer.appendChild(chartCanvas);
 setTimeout(() => {
-    const weeklyTotals = Array.from({ length: weeks }, (_, i) => {
-        const week = i + 1;
-        const allBoxes = document.querySelectorAll(`input[name$='-w${week}']`);
-        return Array.from(allBoxes).filter(b => b.checked).length;
-    });
+        const weeklyTotals = Array.from({ length: weeks }, (_, i) => {
+            const week = i + 1;
+            const allBoxes = document.querySelectorAll(`input[name$='-w${week}']`);
+            return Array.from(allBoxes).filter(b => b.checked).length;
+        });
 
-    const ctx = document.getElementById("attendanceChart").getContext("2d");
-    new Chart(ctx, {
-        type: "line",
-        data: {
-            labels: weeklyTotals.map((_, i) => `W${i + 1}`),
-            datasets: [{
-                label: "每週總出席人數",
-                data: weeklyTotals,
-                borderWidth: 2,
-                fill: false,
-                tension: 0.2
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: '出席人數'
+        const ctx = document.getElementById("attendanceChart").getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: weeklyTotals.map((_, i) => `W${i + 1}`),
+                datasets: [{
+                    label: "每週總出席人數",
+                    data: weeklyTotals,
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.2
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '出席人數'
+                        }
                     }
                 }
             }
-        }
-    });
-}, 500);
+        });
+    }, 500);
+});
