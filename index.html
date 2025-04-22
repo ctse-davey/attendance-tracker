@@ -2,14 +2,17 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>出席表（49週）</title>
+    <title>舊約陪讀旅程出席表</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>舊約陪讀旅程出席表</h1>
+    <button id="sync">同步資料（從 Google Sheets 讀取）</button>
+    <button id="export">匯出為 CSV</button>
+    <canvas id="attendanceChart" style="max-width: 1000px; margin: 20px auto; display: block;"></canvas>
     <div class="tabs" id="monthTabs"></div>
     <div id="tablesContainer"></div>
-    <script src="././script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
